@@ -1,4 +1,5 @@
-import { LLMModel } from "../client/api";
+import { api } from "../client";
+import { OpenAIConfig } from "../client/openai/config";
 import { getClientConfig } from "../config/client";
 import {
   DEFAULT_INPUT_TEMPLATE,
@@ -24,7 +25,75 @@ export enum Theme {
   Light = "light",
 }
 
-export const DEFAULT_CONFIG = {
+export const DEFAULT_CHAT_CONFIG = {
+  enableAutoGenerateTitle: true,
+  sendMemory: true,
+  historyMessageCount: 4,
+  compressMessageLengthThreshold: 1000,
+  enableInjectSystemPrompts: true,
+  template: DEFAULT_INPUT_TEMPLATE,
+};
+
+export const DEFAULT_PROVIDER_CONFIG = {
+  openai: OpenAIConfig.provider,
+  // azure: {
+  //   endpoint: "https://api.openai.com",
+  //   apiKey: "",
+  //   version: "",
+  //   ...COMMON_PROVIDER_CONFIG,
+  // },
+  // claude: {
+  //   endpoint: "https://api.anthropic.com",
+  //   apiKey: "",
+  //   ...COMMON_PROVIDER_CONFIG,
+  // },
+  // google: {
+  //   endpoint: "https://api.anthropic.com",
+  //   apiKey: "",
+  //   ...COMMON_PROVIDER_CONFIG,
+  // },
+};
+
+export const DEFAULT_MODEL_CONFIG = {
+  openai: OpenAIConfig.model,
+  // azure: {
+  //   model: "gpt-3.5-turbo" as string,
+  //   summarizeModel: "gpt-3.5-turbo",
+  //
+  //   temperature: 0.5,
+  //   top_p: 1,
+  //   max_tokens: 2000,
+  //   presence_penalty: 0,
+  //   frequency_penalty: 0,
+  // },
+  // claude: {
+  //   model: "claude-2",
+  //   summarizeModel: "claude-2",
+  //
+  //   max_tokens_to_sample: 100000,
+  //   temperature: 1,
+  //   top_p: 0.7,
+  //   top_k: 1,
+  // },
+  // google: {
+  //   model: "chat-bison-001",
+  //   summarizeModel: "claude-2",
+  //
+  //   temperature: 1,
+  //   topP: 0.7,
+  //   topK: 1,
+  // },
+};
+
+export type LLMProvider = keyof typeof DEFAULT_PROVIDER_CONFIG;
+
+export const DEFAULT_MASK_CONFIG = {
+  provider: "openai" as LLMProvider,
+  chatConfig: { ...DEFAULT_CHAT_CONFIG },
+  modelConfig: { ...DEFAULT_MODEL_CONFIG },
+};
+
+export const DEFAULT_APP_CONFIG = {
   lastUpdate: Date.now(), // timestamp, to merge state
 
   submitKey: SubmitKey.CtrlEnter as SubmitKey,
@@ -33,7 +102,6 @@ export const DEFAULT_CONFIG = {
   theme: Theme.Auto as Theme,
   tightBorder: !!getClientConfig()?.isApp,
   sendPreviewBubble: true,
-  enableAutoGenerateTitle: true,
   sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
 
   disablePromptHint: false,
@@ -41,27 +109,14 @@ export const DEFAULT_CONFIG = {
   dontShowMaskSplashScreen: false, // dont show splash screen when create chat
   hideBuiltinMasks: false, // dont add builtin masks
 
-  customModels: "",
-  models: DEFAULT_MODELS as any as LLMModel[],
-
-  modelConfig: {
-    model: "gpt-3.5-turbo" as ModelType,
-    temperature: 0.5,
-    top_p: 1,
-    max_tokens: 2000,
-    presence_penalty: 0,
-    frequency_penalty: 0,
-    sendMemory: true,
-    historyMessageCount: 4,
-    compressMessageLengthThreshold: 1000,
-    enableInjectSystemPrompts: true,
-    template: DEFAULT_INPUT_TEMPLATE,
-  },
+  providerConfig: { ...DEFAULT_PROVIDER_CONFIG },
+  globalMaskConfig: { ...DEFAULT_MASK_CONFIG },
 };
 
-export type ChatConfig = typeof DEFAULT_CONFIG;
-
-export type ModelConfig = ChatConfig["modelConfig"];
+export type AppConfig = typeof DEFAULT_APP_CONFIG;
+export type ProviderConfig = typeof DEFAULT_PROVIDER_CONFIG;
+export type MaskConfig = typeof DEFAULT_MASK_CONFIG;
+export type ModelConfig = typeof DEFAULT_MODEL_CONFIG;
 
 export function limitNumber(
   x: number,
@@ -98,50 +153,21 @@ export const ModalConfigValidator = {
 };
 
 export const useAppConfig = createPersistStore(
-  { ...DEFAULT_CONFIG },
+  { ...DEFAULT_APP_CONFIG },
   (set, get) => ({
     reset() {
-      set(() => ({ ...DEFAULT_CONFIG }));
+      set(() => ({ ...DEFAULT_APP_CONFIG }));
     },
 
-    mergeModels(newModels: LLMModel[]) {
-      if (!newModels || newModels.length === 0) {
-        return;
-      }
-
-      const oldModels = get().models;
-      const modelMap: Record<string, LLMModel> = {};
-
-      for (const model of oldModels) {
-        model.available = false;
-        modelMap[model.name] = model;
-      }
-
-      for (const model of newModels) {
-        model.available = true;
-        modelMap[model.name] = model;
-      }
-
-      set(() => ({
-        models: Object.values(modelMap),
-      }));
-    },
-
-    allModels() {
-      const customModels = get()
-        .customModels.split(",")
-        .filter((v) => !!v && v.length > 0)
-        .map((m) => ({ name: m, available: true }));
-
-      const models = get().models.concat(customModels);
-      return models;
+    getDefaultClient() {
+      return api.createLLMClient(get().providerConfig, get().globalMaskConfig);
     },
   }),
   {
     name: StoreKey.Config,
-    version: 3.8,
+    version: 4,
     migrate(persistedState, version) {
-      const state = persistedState as ChatConfig;
+      const state = persistedState as any;
 
       if (version < 3.4) {
         state.modelConfig.sendMemory = true;
@@ -168,6 +194,10 @@ export const useAppConfig = createPersistStore(
 
       if (version < 3.8) {
         state.lastUpdate = Date.now();
+      }
+
+      if (version < 4) {
+        // todo: migarte from old versions
       }
 
       return state as any;
