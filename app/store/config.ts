@@ -1,5 +1,6 @@
 import { LLMModel } from "../client/api";
 import { getClientConfig } from "../config/client";
+import { isMacOS } from "../utils";
 import {
   DEFAULT_INPUT_TEMPLATE,
   DEFAULT_MODELS,
@@ -26,8 +27,8 @@ export enum Theme {
 
 export const DEFAULT_CONFIG = {
   lastUpdate: Date.now(), // timestamp, to merge state
-
-  submitKey: SubmitKey.CtrlEnter as SubmitKey,
+  
+  submitKey: isMacOS() ? SubmitKey.MetaEnter : SubmitKey.CtrlEnter,
   avatar: "1f603",
   fontSize: 14,
   theme: Theme.Auto as Theme,
